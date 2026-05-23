@@ -105,19 +105,19 @@ Ver [ARCHITECTURE_ANALYSIS.md](ARCHITECTURE_ANALYSIS.md) para el analisis comple
 ## Instalacion de Cursor CLI
 
 ```bash
-# Via npm (recomendado)
-npm install -g @cursor/agent
+# macOS / Linux / WSL
+curl https://cursor.com/install -fsS | bash
 
 # Verificar
-agent --help
+agent --version   # Debe mostrar algo como: 2026.05.20-2b5dd59
 
-# Autenticar con tu suscripcion (browser flow)
+# Autenticar con tu suscripcion (abre browser)
 agent login
 ```
 
 **Requisito:** Suscripcion Individual ($20/mes) o superior de Cursor. No necesitas API key.
 
-El binario se instala como `agent` (no `cursor`). Ubicacion tipica: `~/.local/bin/agent`.
+El binario se instala como `agent` en `~/.local/bin/agent` (asegurate de que `~/.local/bin` este en tu PATH).
 
 ## Instalacion del plugin profile (standalone)
 
