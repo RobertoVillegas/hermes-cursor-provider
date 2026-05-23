@@ -8,7 +8,17 @@ Provider de Cursor para Hermes Agent. Permite usar el agente de Cursor via ACP (
 
 ## Estado
 
-En desarrollo. Analisis de arquitectura completado. Implementacion lista para PR al upstream.
+✅ **FUNCIONANDO** — Probado con `agent login` + suscripcion Individual de Cursor. Composer 2.5 responde correctamente via ACP.
+
+| Feature | Estado |
+|---------|--------|
+| Autenticacion `agent login` | ✅ Funciona |
+| Crear sesion ACP | ✅ Funciona |
+| Enviar prompts | ✅ Funciona |
+| Streaming de respuestas | ✅ Funciona |
+| Composer 2.5 | ✅ Disponible (solo fast=true en Individual/Pro) |
+
+**Nota:** En suscripcion Individual/Pro, Composer 2.5 solo esta disponible como `composer-2.5[fast=true]`. No hay version "slow" en este tier. Si necesitas la version completa (no-fast), contacta a Cursor para Business/Enterprise.
 
 ## Que es Cursor ACP?
 
