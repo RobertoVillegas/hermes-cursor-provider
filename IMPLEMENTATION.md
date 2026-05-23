@@ -17,8 +17,8 @@ Implementar un provider ACP para Cursor en Hermes Agent, comparable en calidad y
 
 ## Pre-requisitos
 
-1. Cursor CLI instalado localmente (`cursor --acp --stdio` funciona)
-2. Sesion de Cursor autenticada (`cursor login`)
+1. Cursor CLI instalado localmente (`agent acp` funciona)
+2. Sesion de Cursor autenticada (`agent login`)
 3. Hermes Agent instalado desde source para desarrollo
 
 ---
@@ -30,7 +30,7 @@ Crear el cliente ACP para Cursor, basado en `agent/copilot_acp_client.py`.
 ### 1.1 Estructura base
 
 ```python
-"""OpenAI-compatible shim que forward requests a `cursor --acp`."""
+"""OpenAI-compatible shim que forward requests a `agent acp`."""
 ```
 
 ### 1.2 Diferencias clave vs Copilot ACP
@@ -38,7 +38,7 @@ Crear el cliente ACP para Cursor, basado en `agent/copilot_acp_client.py`.
 | Item | Copilot | Cursor |
 |------|---------|--------|
 | Comando default | `copilot` | `agent` |
-| Args default | `--acp --stdio` | `acp` |
+| Args default | `--acp --stdio` | `acp` (o `--model <m> acp`) |
 | Env var comando | `HERMES_COPILOT_ACP_COMMAND` | `CURSOR_ACP_COMMAND` |
 | Env var args | `HERMES_COPILOT_ACP_ARGS` | `CURSOR_ACP_ARGS` |
 | Auth method ID | (none - usa GitHub token) | `cursor_login` |
@@ -246,16 +246,41 @@ if agent.provider == "cursor-acp" or str(client_kwargs.get("base_url", "")).star
 
 ### 7.1 hermes_cli/models.py
 
-Definir modelos disponibles de Cursor. Cursor no expone model names tradicionales, pero podemos definir aliases:
+Definir modelos disponibles de Cursor. Para Composer 2.5 (requiere suscripcion Individual $20+):
 
 ```python
 CURSOR_MODELS = [
-    "cursor-default",
-    "cursor-agent",
+    "cursor/composer-2.5",    # Composer 2.5 (Individual+)
+    "cursor/composer-2",      # Composer 2 (legacy)
+    "cursor/default",         # Default de la cuenta
+    "cursor/auto",            # Auto-seleccion
 ]
 ```
 
-En la practica, el modelo se selecciona internamente por Cursor basado en el prompt y contexto.
+### 7.2 Model selection en ACP
+
+ACP no tiene parametro de modelo en el protocolo JSON-RPC. La seleccion se hace via flag `--model` del CLI:
+
+```python
+# agent --model <modelo> acp
+args = ["--model", "composer-2.5", "acp"]
+```
+
+En el cliente ACP, esto se controla via:
+- `CURSOR_ACP_MODEL` env var
+- `acp_model` parametro en constructor
+- Si no se especifica, usa el default de la cuenta de Cursor
+
+### 7.3 Mapeo de modelos
+
+```python
+CURSOR_MODEL_ALIASES = {
+    "cursor/composer-2.5": "composer-2.5",
+    "cursor/composer-2": "composer-2",
+    "cursor/default": None,  # None = no pasar --model
+    "cursor/auto": None,
+}
+```
 
 ---
 
@@ -291,7 +316,7 @@ Agregar default aux model si es relevante (probablemente no lo es para ACP ya qu
 
 ### 10.2 Tests de integracion
 
-- `hermes chat --provider cursor-acp --model cursor-default`
+- `hermes chat --provider cursor-acp --model cursor/composer-2.5`
 - Verificar que se inicia el subprocess
 - Verificar que se autentica
 - Verificar que responde correctamente
@@ -313,7 +338,7 @@ pytest tests/test_setup_model_selection.py -k cursor -n0 -q
 
 ```bash
 # Smoke test
-python -m hermes_cli.main chat -q "Say hello" --provider cursor-acp --model cursor-default
+python -m hermes_cli.main chat -q "Say hello" --provider cursor-acp --model cursor/composer-2.5
 
 # Interactive flows
 python -m hermes_cli.main model
@@ -352,7 +377,7 @@ Usuario -> hermes chat
       -> Devuelve base_url="acp://cursor"
     -> chat_completion_helpers.create_openai_client(base_url="acp://cursor")
       -> CursorACPClient (shim OpenAI-compatible)
-        -> subprocess.Popen(["cursor", "--acp", "--stdio"])
+        -> subprocess.Popen(["agent", "acp"])
           -> initialize -> authenticate -> session/new -> session/prompt
           <- session/update notifications (streaming)
         <- Response text

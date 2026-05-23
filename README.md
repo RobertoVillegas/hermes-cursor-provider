@@ -25,14 +25,47 @@ El flujo basico:
 7. Recibir respuestas streaming via `session/update` notifications
 8. Responder permisos via `session/request_permission` (allow-once / allow-always / reject-once)
 
-## Composer 2.5 y suscripcion
+## Composer 2.5 y seleccion de modelo
 
-Segun [Lee Robinson](https://x.com/leerob/status/2057170644681277470), Cursor **no ofrece acceso API directo** a su modelo Composer 2.5. La unica forma de usar Composer 2.5 es via ACP con `agent login` (autenticacion browser/suscripcion de Cursor). Las API keys de Cursor funcionan para otros modelos/flujos, pero Composer 2.5 requiere ACP.
+Segun [Lee Robinson](https://x.com/leerob/status/2057170644681277470), Cursor **no ofrece acceso API directo** a Composer 2.5. La unica forma de usarlo es via ACP con `agent login` (autenticacion browser/suscripcion).
 
 | Auth method | Modelos disponibles | Requiere |
 |-------------|-------------------|----------|
-| `agent login` (browser) | **Todos incluyendo Composer 2.5** | Suscripcion de Cursor |
+| `agent login` (browser) | **Todos incluyendo Composer 2.5** | Suscripcion Individual ($20) o superior |
 | `CURSOR_API_KEY` | Modelos basicos / API access | API key del dashboard |
+
+### Seleccionar Composer 2.5 explicitamente
+
+Por defecto, `agent acp` usa el modelo configurado en tu cuenta de Cursor. Para forzar Composer 2.5:
+
+```bash
+export CURSOR_ACP_MODEL=composer-2.5
+hermes chat
+```
+
+O en `~/.hermes/config.yaml`:
+
+```yaml
+model:
+  provider: cursor-acp
+  name: cursor/composer-2.5
+```
+
+**Nota:** Los nombres exactos de modelo pueden variar. Intenta tambien: `composer-2.5`, `composer-2`, o deja que use el default de tu cuenta.
+
+## Diferencia con hermes-cursor-harness
+
+Existe un [PR #18471](https://github.com/NousResearch/hermes-agent/pull/18471) de `Cosmic-Construct/hermes-cursor-harness` que propone integracion via Cursor SDK. Diferencias clave:
+
+| | Este repo (cursor-acp) | hermes-cursor-harness |
+|---|---|---|
+| Fecha | Mayo 2026 | **Mayo 1** (antes de Composer 2.5) |
+| Enfoque | ACP ligero (subprocess stdio) | SDK + ACP + stream-json |
+| Composer 2.5 | **Si** (via ACP + suscripcion) | No (solo `cursor/composer-2`) |
+| Dependencias | Solo `@cursor/agent` | `@cursor/sdk` + Node + mucho mas |
+| Tamaño | ~700 LOC | 10x mas grande |
+
+Para usar Composer 2.5 con suscripcion Individual, **este repo es la opcion recomendada** porque el harness no fue actualizado para la nueva version.
 
 ## Estrategia de integracion: Plugin + Core PR
 

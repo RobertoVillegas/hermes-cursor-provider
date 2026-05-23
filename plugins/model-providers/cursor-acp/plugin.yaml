@@ -1,5 +1,10 @@
 name: cursor-acp-provider
 kind: model-provider
-version: 1.0.0
-description: Cursor Agent via ACP subprocess
+version: 1.0.1
+description: Cursor Agent via ACP subprocess (Composer 2.5 ready)
 author: Roberto Villegas
+models:
+  - cursor-acp
+  - cursor/composer-2.5
+  - cursor/composer-2
+  - cursor/default

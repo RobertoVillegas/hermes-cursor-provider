@@ -7,7 +7,10 @@ back into the minimal shape Hermes expects from an OpenAI client.
 
 Cursor ACP protocol: JSON-RPC 2.0 over stdio via `agent acp` subprocess.
 Auth: pre-authenticate with `agent login` (browser flow) or set CURSOR_API_KEY.
-For Composer 2.5 access, use `agent login` (browser/susbcription auth).
+For Composer 2.5 access, use `agent login` (browser/subscription auth).
+
+Model selection: pass `--model` via `CURSOR_ACP_MODEL` env var or `acp_model`
+param. If unset, ACP uses the account default model.
 
 Based on agent/copilot_acp_client.py from Hermes Agent.
 """
@@ -42,11 +45,22 @@ def _resolve_command() -> str:
     )
 
 
+def _resolve_model() -> str | None:
+    """Return the Cursor model to request via --model, or None for account default."""
+    raw = os.getenv("CURSOR_ACP_MODEL", "").strip()
+    return raw or None
+
+
 def _resolve_args() -> list[str]:
     raw = os.getenv("CURSOR_ACP_ARGS", "").strip()
-    if not raw:
-        return ["acp"]
-    return shlex.split(raw)
+    if raw:
+        return shlex.split(raw)
+    args: list[str] = []
+    model = _resolve_model()
+    if model:
+        args.extend(["--model", model])
+    args.append("acp")
+    return args
 
 
 def _resolve_home_dir() -> str:
@@ -328,15 +342,24 @@ class CursorACPClient:
         acp_command: str | None = None,
         acp_args: list[str] | None = None,
         acp_cwd: str | None = None,
+        acp_model: str | None = None,
         command: str | None = None,
         args: list[str] | None = None,
+        model: str | None = None,
         **_: Any,
     ):
         self.api_key = api_key or "cursor-acp"
         self.base_url = base_url or ACP_MARKER_BASE_URL
         self._default_headers = dict(default_headers or {})
         self._acp_command = acp_command or command or _resolve_command()
-        self._acp_args = list(acp_args or args or _resolve_args())
+        if acp_args or args:
+            self._acp_args = list(acp_args or args or [])
+        else:
+            self._acp_args = _resolve_args()
+            # Allow per-instance model override
+            explicit_model = (acp_model or model or "").strip()
+            if explicit_model and self._acp_args == ["acp"]:
+                self._acp_args = ["--model", explicit_model, "acp"]
         self._acp_cwd = str(Path(acp_cwd or os.getcwd()).resolve())
         self.chat = _ACPChatNamespace(self)
         self.is_closed = False
