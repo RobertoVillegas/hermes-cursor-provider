@@ -1,0 +1,60 @@
+diff --git a/hermes_cli/auth.py b/hermes_cli/auth.py
+index 5fd3676bd..42c785d49 100644
+--- a/hermes_cli/auth.py
++++ b/hermes_cli/auth.py
+@@ -237,6 +237,13 @@ PROVIDER_REGISTRY: Dict[str, ProviderConfig] = {
+         inference_base_url=DEFAULT_COPILOT_ACP_BASE_URL,
+         base_url_env_var="COPILOT_ACP_BASE_URL",
+     ),
++    "cursor-acp": ProviderConfig(
++        id="cursor-acp",
++        name="Cursor ACP",
++        auth_type="external_process",
++        inference_base_url="acp://cursor",
++        base_url_env_var="CURSOR_ACP_BASE_URL",
++    ),
+     "gemini": ProviderConfig(
+         id="gemini",
+         name="Google AI Studio",
+@@ -5853,6 +5860,7 @@ def resolve_api_key_provider_credentials(provider_id: str) -> Dict[str, Any]:
+ 
+ def resolve_external_process_provider_credentials(provider_id: str) -> Dict[str, Any]:
+     """Resolve runtime details for local subprocess-backed providers."""
++    import shutil
+     pconfig = PROVIDER_REGISTRY.get(provider_id)
+     if not pconfig or pconfig.auth_type != "external_process":
+         raise AuthError(
+@@ -5865,6 +5873,33 @@ def resolve_external_process_provider_credentials(provider_id: str) -> Dict[str,
+     if not base_url:
+         base_url = pconfig.inference_base_url
+ 
++    if provider_id == "cursor-acp":
++        command = (
++            os.getenv("CURSOR_ACP_COMMAND", "").strip()
++            or os.getenv("CURSOR_CLI_PATH", "").strip()
++            or "agent"
++        )
++        raw_args = os.getenv("CURSOR_ACP_ARGS", "").strip()
++        args = shlex.split(raw_args) if raw_args else ["acp"]
++        resolved_command = shutil.which(command) if command else None
++        if not resolved_command and not base_url.startswith("acp+tcp://"):
++            raise AuthError(
++                f"Could not find the Cursor CLI command '{command}'. "
++                "Install Cursor CLI (curl https://cursor.com/install -fsS | bash) "
++                "or set CURSOR_ACP_COMMAND/CURSOR_CLI_PATH.",
++                provider=provider_id,
++                code="missing_cursor_cli",
++            )
++        return {
++            "provider": provider_id,
++            "api_key": "cursor-acp",
++            "base_url": base_url.rstrip("/"),
++            "command": resolved_command or command,
++            "args": args,
++            "source": "process",
++        }
++
++    # Default: copilot-acp (backward compatible)
+     command = (
+         os.getenv("HERMES_COPILOT_ACP_COMMAND", "").strip()
+         or os.getenv("COPILOT_CLI_PATH", "").strip()
