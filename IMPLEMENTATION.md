@@ -37,11 +37,12 @@ Crear el cliente ACP para Cursor, basado en `agent/copilot_acp_client.py`.
 
 | Item | Copilot | Cursor |
 |------|---------|--------|
-| Comando default | `copilot` | `cursor` |
-| Args default | `--acp --stdio` | `--acp --stdio` |
+| Comando default | `copilot` | `agent` |
+| Args default | `--acp --stdio` | `acp` |
 | Env var comando | `HERMES_COPILOT_ACP_COMMAND` | `CURSOR_ACP_COMMAND` |
 | Env var args | `HERMES_COPILOT_ACP_ARGS` | `CURSOR_ACP_ARGS` |
 | Auth method ID | (none - usa GitHub token) | `cursor_login` |
+| Pre-auth | `gh auth login` | `agent login` o `CURSOR_API_KEY` |
 | Base URL marker | `acp://copilot` | `acp://cursor` |
 
 ### 1.3 Flujo JSON-RPC

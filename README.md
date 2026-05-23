@@ -12,16 +12,27 @@ En desarrollo. Analisis de arquitectura completado. Implementacion lista para PR
 
 ## Que es Cursor ACP?
 
-Cursor expone su agente AI via **Agent Client Protocol (ACP)**, un protocolo JSON-RPC 2.0 sobre stdin/stdout. Esto permite que cualquier cliente (IDEs, CLI tools, etc.) se conecten al agente de Cursor.
+Cursor expone su agente AI via **Agent Client Protocol (ACP)**, un protocolo JSON-RPC 2.0 sobre stdin/stdout a traves del CLI `agent acp`.
 
 El flujo basico:
 
-1. Iniciar `cursor --acp --stdio` como subproceso
-2. Enviar `initialize` con capabilities del cliente
-3. Autenticar via `authenticate` (methodId: `cursor_login`)
-4. Crear sesion via `session/new`
-5. Enviar prompts via `session/prompt`
-6. Recibir respuestas streaming via `session/update` notifications
+1. Pre-autenticar: `agent login` (browser) o `export CURSOR_API_KEY=...`
+2. Iniciar `agent acp` como subproceso
+3. Enviar `initialize` con capabilities del cliente
+4. Autenticar via `authenticate` (methodId: `cursor_login`)
+5. Crear sesion via `session/new`
+6. Enviar prompts via `session/prompt`
+7. Recibir respuestas streaming via `session/update` notifications
+8. Responder permisos via `session/request_permission` (allow-once / allow-always / reject-once)
+
+## Composer 2.5 y suscripcion
+
+Segun [Lee Robinson](https://x.com/leerob/status/2057170644681277470), Cursor **no ofrece acceso API directo** a su modelo Composer 2.5. La unica forma de usar Composer 2.5 es via ACP con `agent login` (autenticacion browser/suscripcion de Cursor). Las API keys de Cursor funcionan para otros modelos/flujos, pero Composer 2.5 requiere ACP.
+
+| Auth method | Modelos disponibles | Requiere |
+|-------------|-------------------|----------|
+| `agent login` (browser) | **Todos incluyendo Composer 2.5** | Suscripcion de Cursor |
+| `CURSOR_API_KEY` | Modelos basicos / API access | API key del dashboard |
 
 ## Estrategia de integracion: Plugin + Core PR
 
@@ -47,15 +58,31 @@ Ver [ARCHITECTURE_ANALYSIS.md](ARCHITECTURE_ANALYSIS.md) para el analisis comple
 | Archivo | Proposito |
 |---------|-----------|
 | `README.md` | Este archivo |
-| `ARCHITECTURE_ANALYSIS.md` | Analisis profundo de como funciona el sistema de providers en Hermes |
+| `ARCHITECTURE_ANALYSIS.md` | Analisis profundo del sistema de providers en Hermes |
 | `IMPLEMENTATION.md` | Plan de implementacion paso a paso |
 | `cursor_acp_client.py` | Cliente ACP completo (shim OpenAI-compatible) |
 | `plugins/model-providers/cursor-acp/` | Plugin profile declarativo |
 | `patches/` | 5 archivos patch para los cambios minimos en el core |
 | `CONTRIBUTING.md` | Guia para crear el PR al repo oficial |
-| `setup.py` / `pyproject.toml` | Instalacion pip del plugin profile |
+| `pyproject.toml` | Config del paquete pip |
+| `hermes_cursor_provider/` | Paquete pip-installable |
 
-## Instalacion (solo plugin profile)
+## Instalacion de Cursor CLI
+
+```bash
+# Via npm (recomendado)
+npm install -g @cursor/agent
+
+# Verificar
+agent --help
+agent login        # Browser auth para Composer 2.5
+# o
+export CURSOR_API_KEY=sk-...   # Para automation/flujos basicos
+```
+
+El binario se instala como `agent` (no `cursor`). Ubicacion tipica: `~/.local/bin/agent`.
+
+## Instalacion del plugin profile (standalone)
 
 ### Opcion A: Drop-in manual
 
@@ -64,7 +91,7 @@ mkdir -p ~/.hermes/plugins/model-providers/cursor-acp
 cp -r plugins/model-providers/cursor-acp/* ~/.hermes/plugins/model-providers/cursor-acp/
 ```
 
-### Opcion B: pip install (cuando este publicado)
+### Opcion B: pip install
 
 ```bash
 pip install hermes-cursor-provider
@@ -81,16 +108,10 @@ hermes model
 
 # O manualmente en config.yaml
 hermes config set model.provider cursor-acp
-hermes config set model.default "cursor-default"
 
 # Chat
 hermes chat
 ```
-
-## Pre-requisitos
-
-- [Cursor CLI](https://cursor.com/downloads) instalado (`cursor --acp --stdio` funciona)
-- Sesion de Cursor autenticada (`cursor login`)
 
 ## Como contribuir
 
@@ -101,6 +122,11 @@ Ver [CONTRIBUTING.md](CONTRIBUTING.md) para los pasos detallados para crear un P
 - [Model Provider Plugins](https://hermes-agent.nousresearch.com/docs/developer-guide/model-provider-plugin)
 - [Adding Providers](https://hermes-agent.nousresearch.com/docs/developer-guide/adding-providers)
 - [Provider Runtime](https://hermes-agent.nousresearch.com/docs/developer-guide/provider-runtime)
+
+## Documentacion oficial de Cursor
+
+- [Cursor ACP](https://cursor.com/docs/cli/acp)
+- [Cursor Authentication](https://cursor.com/docs/cli/reference/authentication)
 
 ## License
 

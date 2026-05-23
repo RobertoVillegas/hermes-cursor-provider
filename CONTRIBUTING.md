@@ -17,7 +17,25 @@ Para Cursor ACP necesitamos **ambos**.
 
 ---
 
-## Paso 1: Fork de hermes-agent
+## Paso 1: Instalar Cursor CLI
+
+```bash
+# Via npm (recomendado)
+npm install -g @cursor/agent
+
+# Verificar instalacion
+agent --help
+
+# Autenticar (elige UNA opcion)
+agent login                      # Browser auth - acceso a Composer 2.5
+export CURSOR_API_KEY=sk-...     # API key - flujos basicos/CI
+```
+
+**Importante:** El binario se llama `agent`, no `cursor`. Ubicacion tipica: `~/.local/bin/agent`.
+
+---
+
+## Paso 2: Fork de hermes-agent
 
 ```bash
 git clone https://github.com/NousResearch/hermes-agent.git
@@ -27,25 +45,23 @@ git checkout -b feat/cursor-acp-provider
 
 ---
 
-## Paso 2: Aplicar los cambios del core
+## Paso 3: Aplicar los cambios del core
 
-### 2.1 Plugin profile (drop-in)
+### 3.1 Plugin profile (drop-in)
 
 ```bash
-# Copiar plugin al repo de Hermes
 cp -r ../hermes-cursor-provider/plugins/model-providers/cursor-acp \
        plugins/model-providers/
 ```
 
-### 2.2 ACP client
+### 3.2 ACP client
 
 ```bash
-# Copiar cliente ACP
 cp ../hermes-cursor-provider/cursor_acp_client.py \
    agent/cursor_acp_client.py
 ```
 
-### 2.3 Patches al core
+### 3.3 Patches al core
 
 Aplicar cada patch con `patch -p1 < archivo.patch` desde el directorio raiz de hermes-agent:
 
@@ -59,20 +75,6 @@ Aplicar cada patch con `patch -p1 < archivo.patch` desde el directorio raiz de h
 
 ---
 
-## Paso 3: Pre-requisitos para probar
-
-```bash
-# Instalar Cursor CLI
-npm install -g @cursor/agent
-# o descargar desde cursor.com/downloads
-
-# Verificar que funciona
-cursor --help
-cursor login  # Autenticar
-```
-
----
-
 ## Paso 4: Probar localmente
 
 ```bash
@@ -82,12 +84,15 @@ source .venv/bin/activate
 # Instalar en modo desarrollo
 pip install -e .
 
+# Asegurar que agent esta en PATH o configurar override
+export CURSOR_ACP_COMMAND=$(which agent)
+
 # Probar el provider
 hermes model
 # -> Seleccionar "Cursor ACP"
 
 hermes chat
-# -> Deberia iniciar cursor --acp --stdio y funcionar
+# -> Deberia iniciar 'agent acp' y funcionar
 ```
 
 ---
@@ -135,12 +140,16 @@ Add support for Cursor Agent via Agent Client Protocol (ACP).
 - Wire client instantiation in agent_runtime_helpers.py
 - Add cursor models/aliases in models.py
 
-Cursor ACP uses 'cursor --acp --stdio' as a subprocess and
-communicates via JSON-RPC 2.0. Authentication is handled
-via 'cursor login' (OAuth through the Cursor CLI).
+Cursor ACP uses 'agent acp' as a subprocess and communicates
+via JSON-RPC 2.0 over stdio.
+
+Authentication methods:
+- Browser: 'agent login' (recommended, Composer 2.5 access)
+- API key: CURSOR_API_KEY env var
 
 Refs:
 - https://cursor.com/docs/cli/acp
+- https://cursor.com/docs/cli/reference/authentication
 - https://x.com/leerob/status/2057170644681277470
 - https://hermes-agent.nousresearch.com/docs/developer-guide/adding-providers"
 
@@ -195,22 +204,37 @@ agent/
 
 ## Troubleshooting
 
-### "cursor command not found"
+### "agent command not found"
 
-Asegurate de que `cursor` este en PATH:
+Cursor CLI se instala como `agent`, no `cursor`:
 ```bash
-export CURSOR_ACP_COMMAND=/ruta/absoluta/a/cursor
+npm install -g @cursor/agent
+export CURSOR_ACP_COMMAND=$(which agent)
+# o
+export CURSOR_ACP_COMMAND=$HOME/.local/bin/agent
 ```
 
 ### "Cursor ACP authentication failed"
 
-Ejecuta `cursor login` primero. Cursor requiere sesion autenticada.
+Hay dos metodos de autenticacion:
+
+1. **Browser (recomendado, acceso a Composer 2.5):**
+   ```bash
+   agent login
+   ```
+
+2. **API key (automation/CI, modelos basicos):**
+   ```bash
+   export CURSOR_API_KEY=sk-...
+   ```
+
+Para Composer 2.5, usa `agent login`. Las API keys no tienen acceso a Composer 2.5.
 
 ### El proceso ACP se cierra inmediatamente
 
 Verifica stderr:
 ```bash
-cursor --acp --stdio 2>&1 | head -20
+agent acp 2>&1 | head -20
 ```
 
 ### Los tool calls no se extraen correctamente

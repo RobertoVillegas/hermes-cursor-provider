@@ -177,8 +177,8 @@ Este repo (`hermes-cursor-provider`) contiene:
 
 | Aspecto | Copilot ACP | Cursor ACP |
 |---------|------------|------------|
-| **Comando** | `copilot --acp --stdio` | `cursor --acp --stdio` |
-| **Auth** | GitHub token (via `gh auth`) | `cursor login` (OAuth propietario) |
+| **Comando** | `copilot --acp --stdio` | `agent acp` |
+| **Auth** | GitHub token (via `gh auth`) | `agent login` (browser) o `CURSOR_API_KEY` |
 | **Auth en protocolo** | Ninguno (ya autenticado via CLI) | `authenticate` con `methodId: "cursor_login"` |
 | **Base URL** | `acp://copilot` | `acp://cursor` |
 | **Env var comando** | `HERMES_COPILOT_ACP_COMMAND` | `CURSOR_ACP_COMMAND` |

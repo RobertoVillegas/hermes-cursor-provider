@@ -1,9 +1,13 @@
-"""OpenAI-compatible shim that forwards Hermes requests to `cursor --acp`.
+"""OpenAI-compatible shim that forwards Hermes requests to `agent acp`.
 
 This adapter lets Hermes treat the Cursor ACP server as a chat-style
 backend. Each request starts a short-lived ACP session, sends the formatted
 conversation as a single prompt, collects text chunks, and converts the result
 back into the minimal shape Hermes expects from an OpenAI client.
+
+Cursor ACP protocol: JSON-RPC 2.0 over stdio via `agent acp` subprocess.
+Auth: pre-authenticate with `agent login` (browser flow) or set CURSOR_API_KEY.
+For Composer 2.5 access, use `agent login` (browser/susbcription auth).
 
 Based on agent/copilot_acp_client.py from Hermes Agent.
 """
@@ -34,14 +38,14 @@ def _resolve_command() -> str:
     return (
         os.getenv("CURSOR_ACP_COMMAND", "").strip()
         or os.getenv("CURSOR_CLI_PATH", "").strip()
-        or "cursor"
+        or "agent"
     )
 
 
 def _resolve_args() -> list[str]:
     raw = os.getenv("CURSOR_ACP_ARGS", "").strip()
     if not raw:
-        return ["--acp", "--stdio"]
+        return ["acp"]
     return shlex.split(raw)
 
 
@@ -94,13 +98,21 @@ def _jsonrpc_error(message_id: Any, code: int, message: str) -> dict[str, Any]:
     }
 
 
-def _permission_denied(message_id: Any) -> dict[str, Any]:
+def _permission_allow_once(message_id: Any) -> dict[str, Any]:
+    """Respond to session/request_permission with allow-once.
+
+    Cursor ACP valid responses per official docs:
+    - allow-once
+    - allow-always
+    - reject-once
+    """
     return {
         "jsonrpc": "2.0",
         "id": message_id,
         "result": {
             "outcome": {
-                "outcome": "cancelled",
+                "outcome": "selected",
+                "optionId": "allow-once",
             }
         },
     }
@@ -420,7 +432,7 @@ class CursorACPClient:
         except FileNotFoundError as exc:
             raise RuntimeError(
                 f"Could not start Cursor ACP command '{self._acp_command}'. "
-                "Install Cursor CLI or set CURSOR_ACP_COMMAND/CURSOR_CLI_PATH."
+                "Install Cursor CLI (npm install -g @cursor/agent) or set CURSOR_ACP_COMMAND/CURSOR_CLI_PATH."
             ) from exc
 
         if proc.stdin is None or proc.stdout is None:
@@ -600,7 +612,7 @@ class CursorACPClient:
         params = msg.get("params") or {}
 
         if method == "session/request_permission":
-            response = _permission_denied(message_id)
+            response = _permission_allow_once(message_id)
         elif method == "fs/read_text_file":
             try:
                 path = _ensure_path_within_cwd(str(params.get("path") or ""), cwd)
