@@ -1,0 +1,25 @@
+*** Begin Patch
+*** Update File: hermes_cli/providers.py
+@@ HermesOverlay definitions @@
+    "copilot-acp": HermesOverlay(
+        transport="codex_responses",
+        auth_type="external_process",
+        base_url_override="acp://copilot",
+        base_url_env_var="COPILOT_ACP_BASE_URL",
+    ),
++    "cursor-acp": HermesOverlay(
++        transport="codex_responses",
++        auth_type="external_process",
++        base_url_override="acp://cursor",
++        base_url_env_var="CURSOR_ACP_BASE_URL",
++    ),
+
+@@ ALIASES @@
+    "github-copilot-acp": "copilot-acp",
++    "cursor": "cursor-acp",
++    "cursor-agent": "cursor-acp",
+
+@@ _LABEL_OVERRIDES @@
+    "copilot-acp": "GitHub Copilot ACP",
++    "cursor-acp": "Cursor ACP",
+*** End Patch

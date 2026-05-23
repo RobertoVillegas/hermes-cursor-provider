@@ -1,0 +1,9 @@
+*** Begin Patch
+*** Update File: hermes_cli/models.py
+@@ CANONICAL_PROVIDERS or model aliases @@
+# Add cursor-acp to any provider lists that include copilot-acp
+# This depends on the exact structure of models.py in the target version.
+# Typically you just need to ensure cursor-acp is recognized as a valid provider.
+
+# If there's a hardcoded list of ACP providers, add cursor-acp there.
+*** End Patch
