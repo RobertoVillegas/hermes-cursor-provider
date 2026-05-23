@@ -63,15 +63,43 @@ cp ../hermes-cursor-provider/cursor_acp_client.py \
 
 ### 3.3 Patches al core
 
-Aplicar cada patch con `patch -p1 < archivo.patch` desde el directorio raiz de hermes-agent:
+Aplica los 13 patches desde el directorio raiz de hermes-agent:
+
+```bash
+# En el repo de hermes-agent
+git apply ../hermes-cursor-provider/patches/001-hermes_cli-providers.patch
+git apply ../hermes-cursor-provider/patches/002-hermes_cli-auth.patch
+git apply ../hermes-cursor-provider/patches/003-hermes_cli-runtime_provider.patch
+git apply ../hermes-cursor-provider/patches/004-agent-agent_runtime_helpers.patch
+git apply ../hermes-cursor-provider/patches/005-hermes_cli-models.patch
+git apply ../hermes-cursor-provider/patches/006-agent-conversation_loop.patch
+git apply ../hermes-cursor-provider/patches/007-agent-agent_init.patch
+git apply ../hermes-cursor-provider/patches/008-agent-auxiliary_client.patch
+git apply ../hermes-cursor-provider/patches/009-agent-model_metadata.patch
+git apply ../hermes-cursor-provider/patches/010-hermes_cli-auth-fix.patch
+git apply ../hermes-cursor-provider/patches/011-hermes_cli-auth-status.patch
+git apply ../hermes-cursor-provider/patches/012-hermes_cli-model_switch.patch
+```
+
+Para el WebUI (repo separado `hermes-webui`):
+
+```bash
+git apply ../hermes-cursor-provider/patches/013-hermes-webui-config.patch
+```
 
 | Patch | Archivo modificado | Que hace |
 |-------|-------------------|----------|
-| `001-hermes_cli-providers.patch` | `hermes_cli/providers.py` | Agrega overlay `cursor-acp` + alias + label |
-| `002-hermes_cli-auth.patch` | `hermes_cli/auth.py` | Agrega `cursor-acp` a `PROVIDER_REGISTRY` |
-| `003-hermes_cli-runtime_provider.patch` | `hermes_cli/runtime_provider.py` | Agrega resolucion runtime para `cursor-acp` |
-| `004-agent-agent_runtime_helpers.patch` | `agent/agent_runtime_helpers.py` | Instancia `CursorACPClient` cuando `base_url` es `acp://cursor` |
-| `005-hermes_cli-models.patch` | `hermes_cli/models.py` | Agrega modelos/aliases de Cursor |
+| `001-003` | `hermes_cli/` | Registro del provider + auth overlay + runtime resolution |
+| `004` | `agent/agent_runtime_helpers.py` | Instancia `CursorACPClient` |
+| `005` | `hermes_cli/models.py` | Modelos/aliases de Cursor |
+| `006` | `agent/conversation_loop.py` | Desactivar streaming para cursor-acp |
+| `007` | `agent/agent_init.py` | api_mode + acp_command/acp_args |
+| `008` | `agent/auxiliary_client.py` | Soporte en tareas auxiliares |
+| `009` | `agent/model_metadata.py` | Prefijos y contexto de modelo |
+| `010` | `hermes_cli/auth.py` | Fix auth fixup |
+| `011` | `hermes_cli/auth.py` | Auth status generico para external_process |
+| `012` | `hermes_cli/model_switch.py` | Deteccion en `/model` picker |
+| `013` | `hermes-webui/api/config.py` | `_PROVIDER_MODELS` + `_PROVIDER_DISPLAY` del WebUI |
 
 ---
 
@@ -160,19 +188,32 @@ git push origin feat/cursor-acp-provider
 
 ## Estructura de archivos del PR
 
+### Core (hermes-agent)
+
 ```
 plugins/model-providers/cursor-acp/
-  __init__.py          # ProviderProfile registration
-  plugin.yaml          # Manifest
+  __init__.py               # ProviderProfile registration
+  plugin.yaml               # Manifest
 agent/
-  cursor_acp_client.py # ACP client (OpenAI-compatible shim)
+  cursor_acp_client.py      # ACP client (OpenAI-compatible shim)
 hermes_cli/
-  providers.py         # +HermesOverlay, +aliases, +label
-  auth.py              # +ProviderConfig in PROVIDER_REGISTRY
-  runtime_provider.py  # +runtime resolution for cursor-acp
-  models.py            # +cursor models/aliases (si aplica)
+  providers.py              # +HermesOverlay, +aliases, +label
+  auth.py                   # +ProviderConfig in PROVIDER_REGISTRY
+  runtime_provider.py       # +runtime resolution for cursor-acp
+  models.py                 # +cursor models/aliases
+  model_switch.py           # +detection in /model picker
 agent/
   agent_runtime_helpers.py  # +CursorACPClient instantiation
+  conversation_loop.py    # +disable streaming for cursor-acp
+  agent_init.py             # +api_mode + acp_command/acp_args
+  auxiliary_client.py       # +support in aux tasks
+  model_metadata.py         # +prefixes + context
+```
+
+### WebUI (hermes-webui)
+
+```
+api/config.py                 # +cursor-acp in _PROVIDER_MODELS + _PROVIDER_DISPLAY
 ```
 
 ---
@@ -180,25 +221,27 @@ agent/
 ## Checklist segun la documentacion oficial de Hermes
 
 ### OpenAI-compatible provider checklist
-- [ ] ProviderConfig added in `hermes_cli/auth.py`
-- [ ] aliases added in `hermes_cli/auth.py` and `hermes_cli/models.py`
-- [ ] model catalog added in `hermes_cli/models.py`
-- [ ] runtime branch added in `hermes_cli/runtime_provider.py`
-- [ ] CLI wiring added in `hermes_cli/main.py` (setup.py inherits automatically)
-- [ ] aux model added in `agent/auxiliary_client.py`
-- [ ] context lengths added in `agent/model_metadata.py`
+- [x] ProviderConfig added in `hermes_cli/auth.py`
+- [x] aliases added in `hermes_cli/auth.py` and `hermes_cli/models.py`
+- [x] model catalog added in `hermes_cli/models.py`
+- [x] runtime branch added in `hermes_cli/runtime_provider.py`
+- [x] CLI wiring added in `hermes_cli/main.py` (setup.py inherits automatically)
+- [x] aux model added in `agent/auxiliary_client.py`
+- [x] context lengths added in `agent/model_metadata.py`
+- [x] WebUI `_PROVIDER_MODELS` + `_PROVIDER_DISPLAY` updated
 - [ ] runtime / CLI tests updated
 - [ ] user docs updated
 
 ### Native provider checklist (ACP = native)
-- [ ] todo lo anterior
-- [ ] adapter added in `agent/cursor_acp_client.py`
-- [ ] new api_mode supported in `run_agent.py` (chat_completions ya existe)
-- [ ] interrupt / rebuild path works
-- [ ] usage and finish-reason extraction works
-- [ ] fallback path works
+- [x] todo lo anterior
+- [x] adapter added in `agent/cursor_acp_client.py`
+- [x] new api_mode supported in `run_agent.py` (chat_completions ya existe)
+- [x] streaming disabled (ACP handles its own streaming via notifications)
+- [x] interrupt / rebuild path works
+- [x] usage and finish-reason extraction works
+- [x] fallback path works
 - [ ] adapter tests added
-- [ ] live smoke test passes
+- [x] live smoke test passes (tested with Composer 2.5)
 
 ---
 

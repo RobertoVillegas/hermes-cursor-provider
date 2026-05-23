@@ -108,7 +108,33 @@ Ver [ARCHITECTURE_ANALYSIS.md](ARCHITECTURE_ANALYSIS.md) para el analisis comple
 | `pyproject.toml` | Config del paquete pip |
 | `hermes_cursor_provider/` | Paquete pip-installable |
 
-## Instalacion de Cursor CLI
+## Instalacion rapida (todo automatico)
+
+El script `install.sh` aplica todos los patches, copia el cliente ACP e instala el plugin profile:
+
+```bash
+git clone https://github.com/RobertoVillegas/hermes-cursor-provider.git
+cd hermes-cursor-provider
+./install.sh
+```
+
+El script detecta automaticamente `~/.hermes/hermes-agent` y `~/.hermes/hermes-webui`. Si usas rutas custom, exporta:
+
+```bash
+export HERMES_AGENT_DIR=/ruta/a/hermes-agent
+export HERMES_WEBUI_DIR=/ruta/a/hermes-webui
+./install.sh
+```
+
+Luego reinicia el WebUI (si lo usas) y refresca tu navegador.
+
+---
+
+## Instalacion manual (paso a paso)
+
+Si prefieres control total, sigue estos pasos:
+
+### 1. Instalar Cursor CLI
 
 ```bash
 # macOS / Linux / WSL
@@ -125,50 +151,68 @@ agent login
 
 El binario se instala como `agent` en `~/.local/bin/agent` (asegurate de que `~/.local/bin` este en tu PATH).
 
-## Instalacion del plugin profile (standalone)
+### 2. Aplicar los patches al core de Hermes
 
-### Opcion A: Drop-in manual
+```bash
+# Desde el repo clonado
+cd hermes-cursor-provider
+
+# Aplica los 13 patches
+git -C ~/.hermes/hermes-agent apply patches/001-hermes_cli-providers.patch
+git -C ~/.hermes/hermes-agent apply patches/002-hermes_cli-auth.patch
+git -C ~/.hermes/hermes-agent apply patches/003-hermes_cli-runtime_provider.patch
+git -C ~/.hermes/hermes-agent apply patches/004-agent-agent_runtime_helpers.patch
+git -C ~/.hermes/hermes-agent apply patches/005-hermes_cli-models.patch
+git -C ~/.hermes/hermes-agent apply patches/006-agent-conversation_loop.patch
+git -C ~/.hermes/hermes-agent apply patches/007-agent-agent_init.patch
+git -C ~/.hermes/hermes-agent apply patches/008-agent-auxiliary_client.patch
+git -C ~/.hermes/hermes-agent apply patches/009-agent-model_metadata.patch
+git -C ~/.hermes/hermes-agent apply patches/010-hermes_cli-auth-fix.patch
+git -C ~/.hermes/hermes-agent apply patches/011-hermes_cli-auth-status.patch
+git -C ~/.hermes/hermes-agent apply patches/012-hermes_cli-model_switch.patch
+git -C ~/.hermes/hermes-webui apply patches/013-hermes-webui-config.patch
+```
+
+### 3. Copiar el cliente ACP
+
+```bash
+cp cursor_acp_client.py ~/.hermes/hermes-agent/agent/cursor_acp_client.py
+```
+
+### 4. Instalar el plugin profile
 
 ```bash
 mkdir -p ~/.hermes/plugins/model-providers/cursor-acp
 cp -r plugins/model-providers/cursor-acp/* ~/.hermes/plugins/model-providers/cursor-acp/
 ```
 
-### Opcion B: pip install
+### 5. Limpiar caches y reiniciar
 
 ```bash
-pip install hermes-cursor-provider
-```
+# Python caches
+find ~/.hermes/hermes-agent -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null
+find ~/.hermes/hermes-webui -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null
 
-**Nota:** El plugin profile solo registra metadata. Para que funcione completamente, necesitas el ACP client en el core de Hermes (ver CONTRIBUTING.md).
+# WebUI model cache
+rm -f ~/.hermes/webui/models_cache.json
 
-## Uso en Hermes (despues del PR)
-
-```bash
-# Configurar provider
-hermes model
-# -> Seleccionar "Cursor ACP"
-
-# O manualmente en config.yaml
-hermes config set model.provider cursor-acp
-
-# Chat
-hermes chat
-```
-
-## Uso en WebUI
-
-El WebUI (`hermes webui`) usa su propio `_PROVIDER_MODELS` en `api/config.py`. Despues de aplicar el patch 013, reinicia el servidor del WebUI:
-
-```bash
-kill $(lsof -t -i:8787); sleep 2
+# Reiniciar WebUI (si lo usas)
+kill $(lsof -t -i:8787) 2>/dev/null; sleep 2
 cd ~/.hermes/hermes-webui
 ~/.hermes/hermes-agent/venv/bin/python server.py &
 ```
 
-Luego refresca tu navegador y aparecera "Cursor ACP" en el picker de modelos.
+### 6. Usar
 
-## Cambios necesarios en el core
+```bash
+hermes chat
+/model
+# Seleccionar "Cursor ACP"
+```
+
+En el WebUI, simplemente refresca tu navegador despues del reinicio.
+
+---
 
 | # | Archivo | Que arregla |
 |---|---------|------------|
