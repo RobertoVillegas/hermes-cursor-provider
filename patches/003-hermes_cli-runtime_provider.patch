@@ -1,14 +1,14 @@
-*** Begin Patch
-*** Update File: hermes_cli/runtime_provider.py
-@@ resolve_runtime_credentials @@
-    if provider == "copilot-acp":
-        creds = resolve_external_process_provider_credentials(provider)
-        return {
-            "provider": "copilot-acp",
-            "api_mode": "chat_completions",
-            "base_url": creds.get("base_url", "").rstrip("/"),
-            "api_key": creds.get("api_key", ""),
-        }
+diff --git a/hermes_cli/runtime_provider.py b/hermes_cli/runtime_provider.py
+index c40316e02..058a68264 100644
+--- a/hermes_cli/runtime_provider.py
++++ b/hermes_cli/runtime_provider.py
+@@ -1457,8 +1457,16 @@ def resolve_runtime_provider(
+             "api_key": creds.get("api_key", ""),
+             "command": creds.get("command", ""),
+             "args": list(creds.get("args") or []),
+-            "source": creds.get("source", "process"),
+-            "requested_provider": requested_provider,
++        }
 +    if provider == "cursor-acp":
 +        creds = resolve_external_process_provider_credentials(provider)
 +        return {
@@ -16,5 +16,8 @@
 +            "api_mode": "chat_completions",
 +            "base_url": creds.get("base_url", "").rstrip("/") or "acp://cursor",
 +            "api_key": creds.get("api_key", ""),
-+        }
-*** End Patch
++            "command": creds.get("command", ""),
++            "args": list(creds.get("args") or []),
+         }
+ 
+     # Anthropic (native Messages API)

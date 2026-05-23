@@ -25,14 +25,18 @@ El flujo basico:
 7. Recibir respuestas streaming via `session/update` notifications
 8. Responder permisos via `session/request_permission` (allow-once / allow-always / reject-once)
 
-## Composer 2.5 y seleccion de modelo
+## Composer 2.5 y seleccion de modelo (IMPORTANTE: requiere suscripcion Individual/Pro)
+
+**Este provider solo funciona con suscripcion Individual ($20/mes) o superior de Cursor.** No requiere API key. Usa `agent login` (browser auth) que viene con tu suscripcion.
 
 Segun [Lee Robinson](https://x.com/leerob/status/2057170644681277470), Cursor **no ofrece acceso API directo** a Composer 2.5. La unica forma de usarlo es via ACP con `agent login` (autenticacion browser/suscripcion).
 
-| Auth method | Modelos disponibles | Requiere |
-|-------------|-------------------|----------|
-| `agent login` (browser) | **Todos incluyendo Composer 2.5** | Suscripcion Individual ($20) o superior |
-| `CURSOR_API_KEY` | Modelos basicos / API access | API key del dashboard |
+| Metodo de auth | Modelos disponibles | Requiere | Funciona con este provider? |
+|---------------|-------------------|----------|---------------------------|
+| `agent login` (browser) | **Todos incluyendo Composer 2.5** | Suscripcion Individual ($20) o superior | **Si** |
+| `CURSOR_API_KEY` | Modelos basicos / API access | API key del dashboard (no disponible en Individual) | No |
+
+**Nota:** Si tienes API key, el [PR #30641](https://github.com/NousResearch/hermes-agent/pull/30641) de Hermes ofrece integracion via Cursor SDK Python. Este repo es especificamente para quienes tienen suscripcion Individual/Pro **sin** API key y necesitan ACP.
 
 ### Seleccionar Composer 2.5 explicitamente
 
@@ -54,8 +58,6 @@ model:
 **Nota:** Los nombres exactos de modelo pueden variar. Intenta tambien: `composer-2.5`, `composer-2`, o deja que use el default de tu cuenta.
 
 ## Diferencia con hermes-cursor-harness
-
-Existe un [PR #18471](https://github.com/NousResearch/hermes-agent/pull/18471) de `Cosmic-Construct/hermes-cursor-harness` que propone integracion via Cursor SDK. Diferencias clave:
 
 | | Este repo (cursor-acp) | hermes-cursor-harness |
 |---|---|---|
@@ -108,10 +110,12 @@ npm install -g @cursor/agent
 
 # Verificar
 agent --help
-agent login        # Browser auth para Composer 2.5
-# o
-export CURSOR_API_KEY=sk-...   # Para automation/flujos basicos
+
+# Autenticar con tu suscripcion (browser flow)
+agent login
 ```
+
+**Requisito:** Suscripcion Individual ($20/mes) o superior de Cursor. No necesitas API key.
 
 El binario se instala como `agent` (no `cursor`). Ubicacion tipica: `~/.local/bin/agent`.
 
