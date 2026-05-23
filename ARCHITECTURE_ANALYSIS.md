@@ -1,62 +1,81 @@
 # Analisis de Arquitectura: Como integrar Cursor ACP en Hermes
 
+Basado en:
+- Codigo fuente de Hermes Agent (v0.14.0+)
+- [Model Provider Plugins docs](https://hermes-agent.nousresearch.com/docs/developer-guide/model-provider-plugin)
+- [Adding Providers docs](https://hermes-agent.nousresearch.com/docs/developer-guide/adding-providers)
+
+---
+
 ## Conclusion rapida
 
-**Se necesita un PR al repo oficial de Hermes.** El provider de Cursor ACP requiere cambios en el core de Hermes (no puede ser solo un plugin standalone) porque el cliente ACP debe vivir en `agent/` y ser importado por `agent_runtime_helpers.py`.
+**Se necesita un PR al repo oficial de Hermes.** El provider de Cursor ACP requiere cambios en el core porque el cliente ACP debe vivir en `agent/` y ser importado por `agent_runtime_helpers.py`.
 
-Sin embargo, la **mayor parte del trabajo** es copiar y adaptar el patron ya existente de `copilot-acp`. No es complejo.
+**PERO:** La parte declarativa (plugin profile) SI puede ser standalone - como paquete pip o drop-in en `~/.hermes/plugins/model-providers/`.
+
+El patron exacto ya existe con `copilot-acp`. El `cursor-acp` es esencialmente un fork de ese patron.
 
 ---
 
 ## Como funciona el sistema de providers en Hermes
 
-Hermes maneja providers en **5 capas**:
+Hermes maneja providers en capas, segun la [documentacion oficial](https://hermes-agent.nousresearch.com/docs/developer-guide/adding-providers):
 
 ```
-1. Plugin Profile (plugins/model-providers/<name>/)
-   -> Declara metadata: nombre, alias, auth_type, base_url, api_mode
-   -> Se auto-registra con register_provider() al importarse
-   -> PUEDE ser standalone (user plugin en ~/.hermes/plugins/)
-
-2. Auth Registry (hermes_cli/auth.py -> PROVIDER_REGISTRY)
-   -> Mapea provider -> como se autentica
-   -> Necesita entry para "external_process"
-   -> **Requiere cambio en core**
-
-3. Provider Overlay (hermes_cli/providers.py -> HERMES_OVERLAYS)
-   -> Metadata extra sobre transporte y auth
-   -> **Requiere cambio en core**
-
-4. Runtime Resolution (hermes_cli/runtime_provider.py)
-   -> Resuelve credenciales en tiempo de ejecucion
-   -> Para ACP devuelve base_url="acp://cursor"
-   -> **Requiere cambio en core**
-
-5. ACP Client (agent/<name>_acp_client.py)
-   -> El shim OpenAI-compatible que spawnea el subprocess
-   -> Se instancia en agent_runtime_helpers.py
-   -> **Requiere cambio en core** (nuevo archivo + 1 linea en runtime helpers)
+1. Auth (hermes_cli/auth.py) -> como se encuentran credenciales
+2. Runtime (hermes_cli/runtime_provider.py) -> datos de ejecucion (provider, api_mode, base_url, api_key)
+3. Transport (run_agent.py) -> como se construyen y envian requests
+4. CLI (hermes_cli/models.py, hermes_cli/main.py) -> menus y UX
+5. Aux (agent/auxiliary_client.py, agent/model_metadata.py) -> tareas secundarias
 ```
+
+La abstraccion clave es `api_mode`:
+- `chat_completions` -> transporte HTTP OpenAI estandar
+- `codex_responses` -> API de respuestas de Codex
+- `anthropic_messages` -> protocolo nativo de Anthropic
+- `bedrock_converse` -> AWS Bedrock
+- **`external_process` -> subprocess ACP (solo `copilot-acp` hoy)**
+
+---
+
+## Path A vs Path B
+
+### Path A: Provider OpenAI-compatible (fast path)
+
+Para providers que aceptan requests estandar de chat-completions. Solo necesitas:
+- `plugins/model-providers/<name>/__init__.py` (con `register_provider()`)
+- `plugins/model-providers/<name>/plugin.yaml` (manifest)
+
+**Zero cambios al core.** Ejemplos: GMI, Nvidia, DeepSeek.
+
+### Path B: Provider nativo / non-OpenAI
+
+Para providers que NO se comportan como chat-completions estandar. Necesitas:
+- Todo lo de Path A
+- **Un adapter en `agent/<provider>_adapter.py`**
+- **Branches en `run_agent.py`** para request building, dispatch, usage extraction, etc.
+
+Ejemplos en el arbol: `codex_responses`, `anthropic_messages`, `copilot-acp`.
+
+**Cursor ACP es Path B** porque usa JSON-RPC sobre stdin/stdout, no HTTP.
 
 ---
 
 ## Por que NO puede ser solo un plugin standalone
 
-Los model-provider plugins de Hermes son **declarativos** (describen el provider) pero **NO ejecutan codigo custom**:
+Los model-provider plugins de Hermes son **declarativos** (describen el provider) pero **NO ejecutan codigo custom** que reemplace el transporte:
 
 ```python
-# Plugin: solo metadata, no logica de ejecucion
-class ProviderProfile:
-    name: str
-    api_mode: str
-    auth_type: str  # "api_key" | "oauth_*" | "external_process"
-    base_url: str
-    # ... hooks para transformar requests, pero NO para reemplazar el transporte
+# ProviderProfile hooks disponibles:
+prepare_messages()        # pre-procesamiento de mensajes
+build_extra_body()        # campos extra en extra_body
+build_api_kwargs_extras() # split entre extra_body y top-level kwargs
+fetch_models()            # fetch de catalogo de modelos
 ```
 
-El `ProviderProfile` tiene hooks como `prepare_messages()` y `build_extra_body()`, pero **no puede reemplazar el cliente HTTP/transporte**.
+**Ningun hook permite decir "usa subprocess en vez de HTTP".**
 
-Para ACP, Hermes necesita un cliente especial (subprocess JSON-RPC), y eso solo se puede hacer desde el core:
+Para ACP, Hermes necesita un cliente especial que spawnee subprocess y hable JSON-RPC, y eso solo se puede hacer desde el core:
 
 ```python
 # agent/agent_runtime_helpers.py (linea ~1204)
@@ -87,78 +106,70 @@ Esto **debe estar en el core** porque:
 - Integracion nativa y completa
 - Comunidad de Hermes puede revisar y mantener
 - Funciona out-of-the-box para todos los usuarios
-- Puede reutilizar 90% del codigo de copilot-acp
+- Reutiliza 90% del codigo de `copilot-acp`
 
 **Cons:**
 - Requiere review del equipo de Nous Research
 - Puede tardar en mergearse
-- Necesita seguir los estandares de calidad del proyecto
 
-**Files a tocar:**
+**Files a tocar (basado en la doc oficial "File checklist"):**
+
 | File | Cambio | Complejidad |
 |------|--------|-------------|
 | `plugins/model-providers/cursor-acp/__init__.py` | Nuevo: provider profile | Baja |
 | `plugins/model-providers/cursor-acp/plugin.yaml` | Nuevo: manifest | Baja |
-| `agent/cursor_acp_client.py` | Nuevo: ~680 LOC (copia de copilot_acp_client.py adaptado) | Media |
+| `agent/cursor_acp_client.py` | Nuevo: ~540 LOC (copia de copilot_acp_client.py adaptado) | Media |
 | `agent/agent_runtime_helpers.py` | +5 lines: branch para cursor-acp | Baja |
 | `hermes_cli/providers.py` | +10 lines: overlay + alias + label | Baja |
 | `hermes_cli/auth.py` | +8 lines: PROVIDER_REGISTRY entry | Baja |
 | `hermes_cli/runtime_provider.py` | +10 lines: runtime resolution | Baja |
 | `hermes_cli/models.py` | +5 lines: modelos/aliases de cursor | Baja |
+| `agent/auxiliary_client.py` | +3 lines: aux model default | Baja |
 | `tests/` | Tests unitarios e integracion | Media |
 | `website/docs/` | Documentacion del provider | Baja |
 
-**Total: ~12 files, la mayoria son adiciones pequenas. El trabajo real es el ACP client (~680 LOC).**
+**Total: ~12 files. La mayoria son adiciones de 5-10 lineas. El trabajo real es el ACP client (~540 LOC).**
 
 ---
 
-### Opcion B: Plugin standalone + monkey-patch (NO recomendada)
+### Opcion B: Plugin pip + monkey-patch (NO recomendada)
 
-Crear un plugin que solo declara el provider profile, y luego usar un script/hook que:
+Crear un plugin que solo declara el provider profile, y luego usar un script que:
 1. Inyecta `CursorACPClient` en `sys.modules['agent.cursor_acp_client']`
 2. Modifica `agent_runtime_helpers.py` en memoria
 
-**Pros:**
-- No esperar PR
-
-**Cons:**
-- Extremadamente fragil (se rompe con cualquier update de Hermes)
-- Dificil de instalar
-- No es mantenible
-- No es compartible con la comunidad
+**Pros:** Ninguno real.
+**Cons:** Fragil, dificil de instalar, no mantenible, no compartible.
 
 ---
 
-### Opcion C: Repo independiente con "install script" (Intermedia)
+### Opcion C: Repo independiente con referencia de implementacion (LO QUE ESTAMOS HACIENDO)
 
-Crear este repo (`hermes-cursor-provider`) con:
-1. El codigo completo del ACP client
-2. Un script `install.sh` que copia los archivos al checkout de Hermes
-3. Un `patch` file que aplica los cambios minimos al core
+Este repo (`hermes-cursor-provider`) contiene:
+1. El codigo completo del ACP client listo para copiar
+2. El plugin profile listo para drop-in o pip install
+3. Patches documentados para los cambios minimos del core
+4. Guia de contribucion con pasos para el PR
 
 **Pros:**
-- Facil de probar para usuarios avanzados
 - Sirve como base para el PR
 - Documenta exactamente que cambios se necesitan
+- El plugin profile puede usarse standalone (aparece en `hermes doctor`)
+- Facil de probar para usuarios avanzados
 
 **Cons:**
-- Requiere que el usuario tenga el repo de Hermes clonado
-- Aun asi necesita tocar archivos del core
+- Requiere que alguien haga el PR al upstream
+- El ACP client no funciona hasta que este en el core
 
 ---
 
 ## Recomendacion final
 
-1. **Crear este repo** (`hermes-cursor-provider`) como **referencia de implementacion** y para probar localmente
-2. **Fork de hermes-agent** y crear una rama con todos los cambios
+1. **Este repo** (`hermes-cursor-provider`) sirve como **referencia de implementacion**
+2. **Fork de hermes-agent** y crear rama con todos los cambios
 3. **Probar exhaustivamente** localmente con Cursor CLI instalado
 4. **Enviar PR** al repo oficial de Nous Research
-5. **Mantener este repo** como documentacion complementaria
-
-El patron `copilot-acp` ya existe y funciona perfectamente. El `cursor-acp` seria esencialmente un "fork" de ese patron con:
-- `cursor` en vez de `copilot` como comando
-- `cursor_login` como auth method (vs GitHub OAuth de Copilot)
-- Posiblemente extensiones extra del protocolo Cursor
+5. **Mantener este repo** como documentacion complementaria y como paquete pip del plugin profile
 
 ---
 
@@ -182,8 +193,19 @@ El patron `copilot-acp` ya existe y funciona perfectamente. El `cursor-acp` seri
 | File | Descripcion |
 |------|-------------|
 | `plugins/model-providers/copilot-acp/__init__.py` | Template del plugin profile |
+| `plugins/model-providers/copilot-acp/plugin.yaml` | Template del manifest |
 | `agent/copilot_acp_client.py` | Template del ACP client (~686 LOC) |
 | `agent/agent_runtime_helpers.py:1204` | Donde se instancia el ACP client |
 | `hermes_cli/auth.py:233` | Donde se registra el provider config |
 | `hermes_cli/providers.py:87` | Donde se define el overlay |
 | `hermes_cli/runtime_provider.py:1451` | Donde se resuelve el runtime |
+| `providers/base.py` | `ProviderProfile` ABC con hooks |
+| `providers/__init__.py` | `register_provider()` y discovery |
+
+---
+
+## Documentacion oficial relevante
+
+- [Model Provider Plugins](https://hermes-agent.nousresearch.com/docs/developer-guide/model-provider-plugin)
+- [Adding Providers](https://hermes-agent.nousresearch.com/docs/developer-guide/adding-providers)
+- [Provider Runtime](https://hermes-agent.nousresearch.com/docs/developer-guide/provider-runtime)

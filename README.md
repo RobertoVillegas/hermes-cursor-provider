@@ -1,12 +1,14 @@
 # hermes-cursor-provider
 
-Provider de Cursor para Hermes Agent. Permite usar el agente de Cursor via ACP (Agent Client Protocol) como backend de inferencia en Hermes, igual que funciona GitHub Copilot ACP, OpenAI Codex, y los demás providers nativos.
+Provider de Cursor para Hermes Agent. Permite usar el agente de Cursor via ACP (Agent Client Protocol) como backend de inferencia en Hermes, igual que funciona GitHub Copilot ACP, OpenAI Codex, y los demas providers nativos.
+
+**Repo:** https://github.com/RobertoVillegas/hermes-cursor-provider
 
 ---
 
 ## Estado
 
-En desarrollo. Analisis de arquitectura completado. Implementacion en progreso.
+En desarrollo. Analisis de arquitectura completado. Implementacion lista para PR al upstream.
 
 ## Que es Cursor ACP?
 
@@ -21,99 +23,56 @@ El flujo basico:
 5. Enviar prompts via `session/prompt`
 6. Recibir respuestas streaming via `session/update` notifications
 
-## Arquitectura del Provider en Hermes
+## Estrategia de integracion: Plugin + Core PR
 
-Hermes maneja providers en tres capas:
+Hermes tiene dos niveles de providers:
 
-### 1. Provider Definition (`hermes_cli/providers.py`)
+### Nivel 1: Plugin Profile (declarativo)
 
-Los providers se definen via `HermesOverlay` con:
-- `transport`: `openai_chat` | `anthropic_messages` | `codex_responses` | `external_process`
-- `auth_type`: `api_key` | `oauth_external` | `external_process`
-- `base_url_override`: URL del endpoint
-- `base_url_env_var`: variable de entorno para override
-- `extra_env_vars`: variables adicionales
+Se puede instalar como **drop-in plugin** en `~/.hermes/plugins/model-providers/cursor-acp/` o como paquete pip. Solo declara metadata.
 
-Cursor ACP usa `external_process` como auth type (igual que `copilot-acp`).
+### Nivel 2: ACP Client (ejecucion)
 
-### 2. Auth Registry (`hermes_cli/auth.py`)
+Requiere **PR al core de Hermes** porque el cliente ACP debe vivir en `agent/` y ser importado por `agent_runtime_helpers.py`.
 
-El `PROVIDER_REGISTRY` define como se autentica cada provider:
-- API key: lee de env vars
-- OAuth external: flujo de login via navegador
-- External process: delega al subprocess (ACP)
+| Nivel | Archivos | Puede ser plugin standalone? |
+|-------|----------|------------------------------|
+| 1 | `plugins/model-providers/cursor-acp/__init__.py`, `plugin.yaml` | Si |
+| 2 | `agent/cursor_acp_client.py`, patches del core | **No** |
 
-Cursor usa `cursor_login` como auth method en el protocolo ACP.
+Ver [ARCHITECTURE_ANALYSIS.md](ARCHITECTURE_ANALYSIS.md) para el analisis completo.
 
-### 3. Runtime Resolution (`hermes_cli/runtime_provider.py`)
+## Archivos del repo
 
-Resuelve credentials en tiempo de ejecucion. Para ACP providers, esto devuelve un `base_url` especial (`acp://cursor`) que luego el cliente ACP intercepta.
+| Archivo | Proposito |
+|---------|-----------|
+| `README.md` | Este archivo |
+| `ARCHITECTURE_ANALYSIS.md` | Analisis profundo de como funciona el sistema de providers en Hermes |
+| `IMPLEMENTATION.md` | Plan de implementacion paso a paso |
+| `cursor_acp_client.py` | Cliente ACP completo (shim OpenAI-compatible) |
+| `plugins/model-providers/cursor-acp/` | Plugin profile declarativo |
+| `patches/` | 5 archivos patch para los cambios minimos en el core |
+| `CONTRIBUTING.md` | Guia para crear el PR al repo oficial |
+| `setup.py` / `pyproject.toml` | Instalacion pip del plugin profile |
 
-### 4. ACP Client (`agent/cursor_acp_client.py`)
+## Instalacion (solo plugin profile)
 
-Este es el corazon del provider. Es un shim OpenAI-compatible que:
-- Spawnea `cursor --acp --stdio`
-- Convierte mensajes Hermes (OpenAI format) a prompts ACP
-- Extrae tool calls del texto de respuesta
-- Maneja permisos, filesystem reads/writes
-- Devuelve el resultado en formato OpenAI que Hermes espera
-
-## Files a modificar en Hermes (para PR)
-
-| File | Cambio |
-|------|--------|
-| `hermes_cli/providers.py` | Agregar overlay `cursor-acp` en `HERMES_OVERLAYS` y alias |
-| `hermes_cli/auth.py` | Agregar `cursor-acp` a `PROVIDER_REGISTRY` con `auth_type="external_process"` |
-| `hermes_cli/runtime_provider.py` | Agregar resolucion de runtime para `cursor-acp` |
-| `agent/cursor_acp_client.py` | **Nuevo archivo**: Cliente ACP para Cursor |
-| `agent/chat_completion_helpers.py` | Registrar `CursorACPClient` como factory para `acp://cursor` |
-| `hermes_cli/models.py` | Agregar modelos disponibles de Cursor |
-| `hermes_cli/config.py` | Agregar env vars default (`CURSOR_ACP_COMMAND`, etc.) |
-
-## Comparativa: Copilot ACP vs Cursor ACP
-
-| Aspecto | Copilot ACP | Cursor ACP |
-|---------|------------|------------|
-| Comando | `copilot --acp --stdio` | `cursor --acp --stdio` |
-| Auth | GitHub OAuth | Cursor OAuth (`cursor_login`) |
-| Base URL marker | `acp://copilot` | `acp://cursor` |
-| Tool calls | `<tool_call>{...}</tool_call>` | Similar (TBD) |
-| Extension methods | `fs/read_text_file`, `fs/write_text_file` | Igual + `cursor/ask_question`, `cursor/create_plan`, etc. |
-| Subagentes | No | Si (`cursor/task`) |
-
-## Cursor Extension Methods (del protocolo)
-
-Metodos adicionales que Cursor expone sobre ACP estandar:
-
-- `cursor/ask_question` - Preguntar al usuario
-- `cursor/create_plan` - Crear plan de trabajo
-- `cursor/update_todos` - Actualizar lista de tareas
-- `cursor/task` - Ejecutar subagente
-- `cursor/generate_image` - Generar imagenes
-
-## Implementacion
-
-Ver [`cursor_acp_client.py`](cursor_acp_client.py) para el shim OpenAI-compatible.
-
-Ver [`IMPLEMENTATION.md`](IMPLEMENTATION.md) para el plan de implementacion detallado paso a paso.
-
-## Instalacion Cursor CLI
-
-Para usar este provider necesitas el Cursor CLI instalado:
+### Opcion A: Drop-in manual
 
 ```bash
-# Via npm (cuando este disponible)
-npm install -g @cursor/agent
-
-# O descargar desde cursor.com/downloads
+mkdir -p ~/.hermes/plugins/model-providers/cursor-acp
+cp -r plugins/model-providers/cursor-acp/* ~/.hermes/plugins/model-providers/cursor-acp/
 ```
 
-El comando debe estar en PATH como `cursor` o configurar:
+### Opcion B: pip install (cuando este publicado)
+
 ```bash
-export CURSOR_ACP_COMMAND=/path/to/cursor
+pip install hermes-cursor-provider
 ```
 
-## Uso en Hermes
+**Nota:** El plugin profile solo registra metadata. Para que funcione completamente, necesitas el ACP client en el core de Hermes (ver CONTRIBUTING.md).
+
+## Uso en Hermes (despues del PR)
 
 ```bash
 # Configurar provider
@@ -127,6 +86,21 @@ hermes config set model.default "cursor-default"
 # Chat
 hermes chat
 ```
+
+## Pre-requisitos
+
+- [Cursor CLI](https://cursor.com/downloads) instalado (`cursor --acp --stdio` funciona)
+- Sesion de Cursor autenticada (`cursor login`)
+
+## Como contribuir
+
+Ver [CONTRIBUTING.md](CONTRIBUTING.md) para los pasos detallados para crear un PR al repo oficial de Hermes.
+
+## Documentacion oficial de Hermes
+
+- [Model Provider Plugins](https://hermes-agent.nousresearch.com/docs/developer-guide/model-provider-plugin)
+- [Adding Providers](https://hermes-agent.nousresearch.com/docs/developer-guide/adding-providers)
+- [Provider Runtime](https://hermes-agent.nousresearch.com/docs/developer-guide/provider-runtime)
 
 ## License
 

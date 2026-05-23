@@ -1,14 +1,27 @@
 # Plan de Implementacion: Cursor ACP Provider para Hermes
 
+Basado en:
+- Codigo fuente de Hermes Agent (v0.14.0+)
+- [Adding Providers docs](https://hermes-agent.nousresearch.com/docs/developer-guide/adding-providers)
+- [Model Provider Plugins docs](https://hermes-agent.nousresearch.com/docs/developer-guide/model-provider-plugin)
+
+---
+
 ## Resumen
 
 Implementar un provider ACP para Cursor en Hermes Agent, comparable en calidad y patrones a los providers existentes (`copilot-acp`, `openai-codex`, `github-copilot`).
+
+**Tipo de provider:** Native / non-OpenAI (Path B en la terminologia de Hermes). Usa JSON-RPC 2.0 sobre stdin/stdout via subprocess.
+
+---
 
 ## Pre-requisitos
 
 1. Cursor CLI instalado localmente (`cursor --acp --stdio` funciona)
 2. Sesion de Cursor autenticada (`cursor login`)
 3. Hermes Agent instalado desde source para desarrollo
+
+---
 
 ## Fase 1: Scaffold y ACP Client (agent/cursor_acp_client.py)
 
@@ -110,9 +123,61 @@ Igual que Copilot ACP:
 - Parsear JSON interno con `id`, `type`, `function` (name, arguments)
 - Devolver como `SimpleNamespace` objects compatibles con OpenAI
 
-## Fase 2: Provider Registry
+---
 
-### 2.1 hermes_cli/providers.py
+## Fase 2: Provider Profile (plugin declarativo)
+
+### 2.1 Plugin directory
+
+```
+plugins/model-providers/cursor-acp/
+  __init__.py    # ProviderProfile + register_provider()
+  plugin.yaml    # Manifest
+```
+
+### 2.2 Profile definition
+
+```python
+from providers import register_provider
+from providers.base import ProviderProfile
+
+cursor_acp = ProviderProfile(
+    name="cursor-acp",
+    aliases=("cursor", "cursor-agent"),
+    api_mode="chat_completions",
+    env_vars=(),
+    base_url="acp://cursor",
+    auth_type="external_process",
+    display_name="Cursor ACP",
+    description="Cursor Agent via Agent Client Protocol (ACP) subprocess",
+    signup_url="https://cursor.com",
+)
+register_provider(cursor_acp)
+```
+
+---
+
+## Fase 3: Auth Registry
+
+### 3.1 hermes_cli/auth.py
+
+Agregar a `PROVIDER_REGISTRY`:
+
+```python
+"cursor-acp": ProviderConfig(
+    id="cursor-acp",
+    name="Cursor ACP",
+    auth_type="external_process",
+    inference_base_url="acp://cursor",
+    base_url_env_var="CURSOR_ACP_BASE_URL",
+),
+```
+
+---
+
+## Fase 4: Provider Overlay
+
+### 4.1 hermes_cli/providers.py
 
 Agregar a `HERMES_OVERLAYS`:
 
@@ -128,7 +193,7 @@ Agregar a `HERMES_OVERLAYS`:
 Agregar alias:
 ```python
 "cursor": "cursor-acp",
-"cursor-acp": "cursor-acp",
+"cursor-agent": "cursor-acp",
 ```
 
 Agregar label:
@@ -136,47 +201,49 @@ Agregar label:
 "cursor-acp": "Cursor ACP",
 ```
 
-### 2.2 hermes_cli/auth.py
+---
 
-Agregar a `PROVIDER_REGISTRY`:
+## Fase 5: Runtime Resolution
+
+### 5.1 hermes_cli/runtime_provider.py
+
+En `resolve_runtime_credentials()`, agregar branch para `cursor-acp`:
 
 ```python
-"cursor-acp": ProviderConfig(
-    id="cursor-acp",
-    name="Cursor ACP",
-    auth_type="external_process",
-    inference_base_url="acp://cursor",
-    base_url_env_var="CURSOR_ACP_BASE_URL",
-),
+if provider == "cursor-acp":
+    creds = resolve_external_process_provider_credentials(provider)
+    return {
+        "provider": "cursor-acp",
+        "api_mode": "chat_completions",
+        "base_url": creds.get("base_url", "").rstrip("/") or "acp://cursor",
+        "api_key": creds.get("api_key", ""),
+    }
 ```
 
-## Fase 3: Runtime Resolution
+---
 
-### 3.1 hermes_cli/runtime_provider.py
+## Fase 6: Client Instantiation
 
-En `resolve_runtime_credentials()` o similar, agregar branch para `cursor-acp` que:
-1. Verifique que `cursor` (o `CURSOR_ACP_COMMAND`) existe en PATH
-2. Verifique que el usuario tiene sesion autenticada
-3. Devuelva `base_url="acp://cursor"` y `api_mode="codex_responses"`
-
-### 3.2 agent/chat_completion_helpers.py
+### 6.1 agent/agent_runtime_helpers.py
 
 En `create_openai_client()` o similar, agregar branch para URLs que empiecen con `acp://cursor`:
 
 ```python
-if base_url.startswith("acp://cursor"):
+if agent.provider == "cursor-acp" or str(client_kwargs.get("base_url", "")).startswith("acp://cursor"):
     from agent.cursor_acp_client import CursorACPClient
-    return CursorACPClient(
-        api_key=api_key,
-        base_url=base_url,
-        acp_command=...,
-        acp_args=...,
+    client = CursorACPClient(**client_kwargs)
+    _ra().logger.info(
+        "Cursor ACP client created (%s, shared=%s) %s",
+        reason, shared, agent._client_log_context(),
     )
+    return client
 ```
 
-## Fase 4: Modelos
+---
 
-### 4.1 hermes_cli/models.py
+## Fase 7: Modelos
+
+### 7.1 hermes_cli/models.py
 
 Definir modelos disponibles de Cursor. Cursor no expone model names tradicionales, pero podemos definir aliases:
 
@@ -189,25 +256,77 @@ CURSOR_MODELS = [
 
 En la practica, el modelo se selecciona internamente por Cursor basado en el prompt y contexto.
 
-## Fase 5: Testing
+---
 
-### 5.1 Tests unitarios
+## Fase 8: CLI Wiring
+
+### 8.1 hermes_cli/main.py
+
+Agregar `cursor-acp` a:
+- `provider_labels` dict
+- Lista de providers en `select_provider_and_model()`
+- `--provider` argument choices
+
+Nota: `hermes_cli/setup.py` no necesita cambios porque delega a `main.py`.
+
+---
+
+## Fase 9: Aux Model
+
+### 9.1 agent/auxiliary_client.py
+
+Agregar default aux model si es relevante (probablemente no lo es para ACP ya que todo va al subprocess).
+
+---
+
+## Fase 10: Tests
+
+### 10.1 Tests unitarios
 
 - Mock del subprocess `cursor`
 - Verificar formato JSON-RPC correcto
 - Verificar extraccion de tool calls
 - Verificar manejo de permisos
 
-### 5.2 Tests de integracion
+### 10.2 Tests de integracion
 
 - `hermes chat --provider cursor-acp --model cursor-default`
 - Verificar que se inicia el subprocess
 - Verificar que se autentica
 - Verificar que responde correctamente
 
-## Fase 6: Documentacion
+### 10.3 Tests de wiring
 
-### 6.1 Docs de Hermes
+Segun la [documentacion oficial](https://hermes-agent.nousresearch.com/docs/developer-guide/adding-providers):
+
+```bash
+pytest tests/test_runtime_provider_resolution.py -k cursor -n0 -q
+pytest tests/test_cli_provider_resolution.py -k cursor -n0 -q
+pytest tests/test_cli_model_command.py -k cursor -n0 -q
+pytest tests/test_setup_model_selection.py -k cursor -n0 -q
+```
+
+---
+
+## Fase 11: Live Verification
+
+```bash
+# Smoke test
+python -m hermes_cli.main chat -q "Say hello" --provider cursor-acp --model cursor-default
+
+# Interactive flows
+python -m hermes_cli.main model
+python -m hermes_cli.main setup
+
+# Tool call test
+python -m hermes_cli.main chat -q "Lee el archivo README.md"
+```
+
+---
+
+## Fase 12: Documentacion
+
+### 12.1 Docs de Hermes
 
 Agregar a `website/docs/integrations/providers.md`:
 - Setup del provider
@@ -215,9 +334,13 @@ Agregar a `website/docs/integrations/providers.md`:
 - Autenticacion
 - Troubleshooting
 
-### 6.2 Este repo
+### 12.2 Otros docs
 
-Mantener actualizado con cambios del upstream.
+- `website/docs/getting-started/quickstart.md`
+- `website/docs/user-guide/configuration.md`
+- `website/docs/reference/environment-variables.md`
+
+---
 
 ## Diagrama de flujo
 
@@ -236,9 +359,13 @@ Usuario -> hermes chat
     <- Final answer
 ```
 
+---
+
 ## Referencias
 
 - [Cursor ACP Docs](https://cursor.com/docs/cli/acp)
 - [Hermes Provider Docs](https://hermes-agent.nousresearch.com/docs/integrations/providers)
 - [Lee Robinson Tweet](https://x.com/leerob/status/2057170644681277470?s=20)
+- [Hermes: Adding Providers](https://hermes-agent.nousresearch.com/docs/developer-guide/adding-providers)
+- [Hermes: Model Provider Plugins](https://hermes-agent.nousresearch.com/docs/developer-guide/model-provider-plugin)
 - [Copilot ACP Client en Hermes](https://github.com/NousResearch/hermes-agent/blob/main/agent/copilot_acp_client.py)
