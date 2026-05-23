@@ -103,7 +103,7 @@ Ver [ARCHITECTURE_ANALYSIS.md](ARCHITECTURE_ANALYSIS.md) para el analisis comple
 | `IMPLEMENTATION.md` | Plan de implementacion paso a paso |
 | `cursor_acp_client.py` | Cliente ACP completo (shim OpenAI-compatible) |
 | `plugins/model-providers/cursor-acp/` | Plugin profile declarativo |
-| `patches/` | 10 archivos patch para los cambios en el core de Hermes (providers, auth, runtime, models, conversation_loop, agent_init, auxiliary_client, model_metadata) |
+| `patches/` | 11 archivos patch para los cambios en el core de Hermes |
 | `CONTRIBUTING.md` | Guia para crear el PR al repo oficial |
 | `pyproject.toml` | Config del paquete pip |
 | `hermes_cursor_provider/` | Paquete pip-installable |
