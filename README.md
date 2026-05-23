@@ -16,9 +16,9 @@ Provider de Cursor para Hermes Agent. Permite usar el agente de Cursor via ACP (
 | Crear sesion ACP | ✅ Funciona |
 | Enviar prompts | ✅ Funciona |
 | Streaming de respuestas | ✅ Funciona |
-| Composer 2.5 | ✅ Disponible (solo fast=true en Individual/Pro) |
+| Composer 2.5 | ✅ Disponible (configurable en tu cuenta de Cursor) |
 
-**Nota:** En suscripcion Individual/Pro, Composer 2.5 solo esta disponible como `composer-2.5[fast=true]`. No hay version "slow" en este tier. Si necesitas la version completa (no-fast), contacta a Cursor para Business/Enterprise.
+**Nota:** El modelo que usa ACP depende de tu configuracion de cuenta de Cursor. Puedes cambiarlo desde la app de Cursor o el CLI interactivo (`agent` → `/model`). El ACP usa el modelo que tengas seleccionado como default.
 
 ## Que es Cursor ACP?
 
@@ -48,24 +48,20 @@ Segun [Lee Robinson](https://x.com/leerob/status/2057170644681277470), Cursor **
 
 **Nota:** Si tienes API key, el [PR #30641](https://github.com/NousResearch/hermes-agent/pull/30641) de Hermes ofrece integracion via Cursor SDK Python. Este repo es especificamente para quienes tienen suscripcion Individual/Pro **sin** API key y necesitan ACP.
 
-### Seleccionar Composer 2.5 explicitamente
+### Seleccionar Composer 2.5
 
-Por defecto, `agent acp` usa el modelo configurado en tu cuenta de Cursor. Para forzar Composer 2.5:
+El modelo que usa ACP lo controla tu cuenta de Cursor, no Hermes. Para cambiarlo:
 
-```bash
-export CURSOR_ACP_MODEL=composer-2.5
-hermes chat
+1. Abre la app de Cursor o corre `agent` en modo interactivo
+2. Cambia el modelo a Composer 2.5 (sin fast si prefieres)
+3. El ACP automaticamente usara ese modelo como default
+
+**No uses `CURSOR_ACP_MODEL`** para forzar el modelo. El ACP CLI de Individual/Pro solo expone `composer-2.5[fast=true]` en su catalogo interno, pero el modelo real depende de tu configuracion de cuenta.
+
+Si necesitas confirmar que modelo esta usando, simplemente pregunta en el chat:
 ```
-
-O en `~/.hermes/config.yaml`:
-
-```yaml
-model:
-  provider: cursor-acp
-  name: cursor/composer-2.5
+What model are you currently running?
 ```
-
-**Nota:** Los nombres exactos de modelo pueden variar. Intenta tambien: `composer-2.5`, `composer-2`, o deja que use el default de tu cuenta.
 
 ## Diferencia con hermes-cursor-harness
 
