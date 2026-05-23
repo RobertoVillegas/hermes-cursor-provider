@@ -103,7 +103,7 @@ Ver [ARCHITECTURE_ANALYSIS.md](ARCHITECTURE_ANALYSIS.md) para el analisis comple
 | `IMPLEMENTATION.md` | Plan de implementacion paso a paso |
 | `cursor_acp_client.py` | Cliente ACP completo (shim OpenAI-compatible) |
 | `plugins/model-providers/cursor-acp/` | Plugin profile declarativo |
-| `patches/` | 12 archivos patch para los cambios en el core de Hermes |
+| `patches/` | 13 archivos patch para los cambios en el core de Hermes y WebUI |
 | `CONTRIBUTING.md` | Guia para crear el PR al repo oficial |
 | `pyproject.toml` | Config del paquete pip |
 | `hermes_cursor_provider/` | Paquete pip-installable |
@@ -155,6 +155,34 @@ hermes config set model.provider cursor-acp
 # Chat
 hermes chat
 ```
+
+## Uso en WebUI
+
+El WebUI (`hermes webui`) usa su propio `_PROVIDER_MODELS` en `api/config.py`. Despues de aplicar el patch 013, reinicia el servidor del WebUI:
+
+```bash
+kill $(lsof -t -i:8787); sleep 2
+cd ~/.hermes/hermes-webui
+~/.hermes/hermes-agent/venv/bin/python server.py &
+```
+
+Luego refresca tu navegador y aparecera "Cursor ACP" en el picker de modelos.
+
+## Cambios necesarios en el core
+
+| # | Archivo | Que arregla |
+|---|---------|------------|
+| 001-003 | `agent_runtime_helpers.py`, `agent_init.py` | Registro del provider y discovery |
+| 004 | `providers.yaml` | Metadata del provider en el registro |
+| 005 | `hermes_cli/auth.py` | Resolucion de credenciales external_process |
+| 006 | `agent/conversation_loop.py` | Desactivar streaming para cursor-acp |
+| 007 | `agent/agent_init.py` | api_mode y pasar acp_command/acp_args |
+| 008 | `agent/auxiliary_client.py` | Soporte en tareas auxiliares |
+| 009 | `agent/model_metadata.py` | Prefijos y contexto de modelo |
+| 010 | `agent/conversation_loop.py` | Paridad con copilot-acp en streaming |
+| 011 | `hermes_cli/auth.py` | Auth status generico para external_process |
+| 012 | `hermes_cli/model_switch.py` | Deteccion en `/model` picker del CLI |
+| 013 | `hermes-webui/api/config.py` | `_PROVIDER_MODELS` y `_PROVIDER_DISPLAY` del WebUI |
 
 ## Como contribuir
 
